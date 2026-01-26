@@ -2,5 +2,5 @@
 
 // TODO: Implement the add function
 int add(int a, int b) {
-    return a + b; // Placeholder 
+    return 0; // Placeholder 
 }
