@@ -1,0 +1,10 @@
+client: #client configuration
+    port: 8080 # default socket port for outgoing msgs
+    management_port: 8085 # default socket port for management operations
+    max_readings: 5 # max readings the ebclient will do
+    gps_sensor_id: 0 # GPS sensor id, used as column index for the CSV file 
+    gps_hal_port: 2 # HAL port to attach the gps    
+server: # Server configuration available for the client
+    ip: 192.168.1.99
+    port: 8080 # default socket port
+    

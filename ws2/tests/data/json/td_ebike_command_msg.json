@@ -1,0 +1,6 @@
+{
+    "directive": "COMMAND",
+    "ebike_ids": [21],
+    "action": ["lock"],
+    "timestamp": "TODO"
+}

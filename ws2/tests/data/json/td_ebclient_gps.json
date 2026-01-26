@@ -1,0 +1,9 @@
+{
+"hal_ports": 3,
+"csv_file": "data/sim-eBike-1.csv",
+"port_attach": 1,
+"gps_id": 777,
+"gps_dim": 2,
+"gps_raw_reading": "51.457130;-2.557153",
+"gps_formatted_reading" : "{\"gps\":{\"lon\": 51.457130, \"lat\": -2.557153}}"
+}

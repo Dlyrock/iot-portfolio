@@ -1,0 +1,7 @@
+server: # Server address
+  ip: 192.168.1.99 # default server address
+  port: 8080 # default socket port 
+  management_port: 8085 # default socket port for management operations
+  data_interval: 5
+webserver:
+  port: 0 # TODO: Update with your allocated port as per specifications.

@@ -1,0 +1,15 @@
+name: Coursework Report Workflow
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  call_check_solution:
+    uses: uwe-scct/common_gh_workflows/.github/workflows/check-solution.yml@main
+    secrets: inherit
+
+  trigger_push_reports:
+    needs: call_check_solution
+    uses: uwe-scct/common_gh_workflows/.github/workflows/push-reports.yml@main
+    secrets: inherit

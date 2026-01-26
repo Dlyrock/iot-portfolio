@@ -1,0 +1,11 @@
+MiscUtilsTest:
+  - case: "Test that, given vector of key-value pairs, a JSON string is correctly generated with the key-values of the vector"
+    data: "td_miscutils_generate_json.json"
+ebikeClientTest:
+  - case: "Test HALManager is initialised and manages ports (attach and release) correctly" 
+    data: "td_ebclient_gps.json"
+GPSSensorTest:
+  - case: "Test GPSSensor is built correctly (id and dimensions)"
+    data: "td_ebclient_gps.json"
+  - case: "Test GPSSensor formats correctly returning a valid pair of latitude and longitude in JSON format"
+    data: "td_ebclient_gps.json"

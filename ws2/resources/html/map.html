@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- DO NOT MODIFY THIS FILE -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eBike Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map {
+            height: 80vh; /* Map takes 80% of the viewport height */
+        }
+        #bicycle-table-container {
+            height: 20vh; /* Table takes 20% of the viewport height */
+            overflow-y: auto; /* Enable vertical scrolling */
+            border: 1px solid #ccc;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+            position: sticky; /* Make the header sticky */
+            top: 0; /* Stick to the top of the container */
+            z-index: 1; /* Ensure the header is above the rows */
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="bicycle-table-container">
+        <table id="bicycle-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Coordinates</th>
+                    <th>Status</th>
+                    <th>Last Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Rows will be added dynamically here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Initialize the map
+        const map = L.map('map').setView([51.455, -2.585], 13); // Centered on Bristol
+        window.map = map;
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+        }).addTo(map);
+
+        // Track bicycle markers by ID to prevent duplicates
+        const bicycleMarkers = new Map();
+
+        // Fetch bicycle data and update the map and table
+        async function fetchEbikes() {
+            try {
+                const response = await fetch('/ebikes');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch bicycle data');
+                }
+                const data = await response.json();
+                updateMap(data.features);
+                updateTable(data.features);
+            } catch (error) {
+                console.error('Error fetching bicycle data:', error);
+            }
+        }
+
+        // Update the map with bicycle markers
+        function updateMap(ebikes) {
+            ebikes.forEach(ebike => {
+                const id = ebike.properties.id;
+                const [lon, lat] = ebike.geometry.coordinates;
+                const status = ebike.properties.status;
+
+                // Check if the ebike is already on the map
+                if (bicycleMarkers.has(id)) {
+                    // Update the marker's position and popup if it already exists
+                    const marker = bicycleMarkers.get(id);
+                    marker.setLatLng([lat, lon]);
+                    marker.setPopupContent(`ID: ${id}<br>Status: ${status}`);
+                } else {
+                    // Add a new marker for the ebike
+                    const markerColor = status === 'locked' ? 'red' : 'green';
+                    const marker = L.circleMarker([lat, lon], {
+                        color: markerColor,
+                        radius: 8,
+                    }).addTo(map).bindPopup(`ID: ${id}<br>Status: ${status}`);
+                    bicycleMarkers.set(id, marker);
+                }
+            });
+        }
+
+        // Update the table with ebike data
+        function updateTable(ebikes) {
+            const tableBody = document.getElementById('bicycle-table').querySelector('tbody');
+            tableBody.innerHTML = ''; // Clear existing rows
+
+            ebikes.forEach(ebike => {
+                const row = document.createElement('tr');
+                const idCell = document.createElement('td');
+                const coordinatesCell = document.createElement('td');
+                const statusCell = document.createElement('td');
+                const timestampCell = document.createElement('td');
+
+                idCell.textContent = ebike.properties.id;
+                coordinatesCell.textContent = `${ebike.geometry.coordinates[1].toFixed(5)}, ${ebike.geometry.coordinates[0].toFixed(5)}`;
+                statusCell.textContent = ebike.properties.status;
+                timestampCell.textContent = ebike.properties.timestamp;
+
+                row.appendChild(idCell);
+                row.appendChild(coordinatesCell);
+                row.appendChild(statusCell);
+                row.appendChild(timestampCell);
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Fetch ebike data every 5 seconds
+        fetchEbikes();
+        setInterval(fetchEbikes, 5000);
+    </script>
+</body>
+</html>
