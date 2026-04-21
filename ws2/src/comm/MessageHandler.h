@@ -7,6 +7,7 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <map>
 #include <arpa/inet.h>
 #include <Poco/JSON/Parser.h>
 #include <Poco/JSON/Object.h>
@@ -18,7 +19,8 @@ class MessageHandler {
 public:
     explicit MessageHandler(Poco::JSON::Array::Ptr& ebikes) : ebikes_(ebikes) {}
 
-    void handleMessage(const std::string& msg, const std::string& clientIp, Poco::JSON::Array::Ptr& ebikes) {
+    void handleMessage(const std::string& msg, const std::string& clientIp, 
+                       Poco::JSON::Array::Ptr& ebikes, sim::socket* sock = nullptr) {
         try {
             Poco::JSON::Parser parser;
             auto result = parser.parse(msg);
@@ -73,9 +75,37 @@ public:
             } else if (type == "JOIN") {
                 int ebikeId = json->getValue<int>("ebike_id");
                 std::cout << "[MHANDLER] JOIN from ebike " << ebikeId << std::endl;
+                // Store ebike IP
+                ebikeIps_[ebikeId] = clientIp;
+
             } else if (type == "COMMAND") {
                 std::string action = json->getValue<std::string>("action");
                 std::cout << "[MHANDLER] COMMAND from management client: action=" << action << std::endl;
+
+                // Forward command to each ebike
+                if (sock) {
+                    auto ids = json->getArray("ebike_ids");
+                    for (size_t i = 0; i < ids->size(); i++) {
+                        int ebikeId = ids->get(i).convert<int>();
+                        if (ebikeIps_.count(ebikeId)) {
+                            std::string ebikeIp = ebikeIps_[ebikeId];
+                            struct sockaddr_in ebikeAddr;
+                            memset(&ebikeAddr, 0, sizeof(ebikeAddr));
+                            ebikeAddr.sin_family = AF_INET;
+                            inet_pton(AF_INET, ebikeIp.c_str(), &ebikeAddr.sin_addr);
+                            ebikeAddr.sin_port = htons(8087);
+                            std::ostringstream cmd;
+                            cmd << "{\"type\":\"COMMAND\",\"action\":\"" << action << "\","
+                                << "\"ebike_id\":" << ebikeId << "}";
+                            sock->sendto(cmd.str().c_str(), cmd.str().size(), 0, ebikeAddr);
+                        }
+                    }
+                }
+
+            } else if (type == "COMMACK") {
+                int ebikeId = json->getValue<int>("ebike_id");
+                std::cout << "[MHANDLER] COMMACK from ebike " << ebikeId << ": success" << std::endl;
+
             } else if (type == "SETUP") {
                 int interval = json->getValue<int>("data_interval");
                 std::cout << "[MHANDLER] SETUP: interval updated to " << interval << std::endl;
@@ -91,4 +121,5 @@ public:
 
 private:
     Poco::JSON::Array::Ptr& ebikes_;
+    std::map<int, std::string> ebikeIps_;
 };

@@ -3,7 +3,6 @@
  * @brief eBike client application with UDP socket communication.
  * Module: UFCFVK-15-2 Internet of Things
  */
-#include <iomanip>
 #include <string>
 #include <iostream>
 #include <sstream>
@@ -13,8 +12,8 @@
 #include <csignal>
 #include <ctime>
 #include <cstring>
-#include <iomanip>
 #include <arpa/inet.h>
+#include <iomanip>
 
 #include "util/MiscUtils.h"
 #include "hal/CSVHALManager.h"
@@ -27,6 +26,9 @@ namespace ebikeConstants {
 }
 
 static std::atomic<bool> g_running{true};
+static std::atomic<bool> g_locked{false};
+static std::atomic<int> g_dataInterval{5};
+
 void signalHandler(int) { g_running = false; }
 
 std::string currentTimestamp() {
@@ -88,6 +90,53 @@ private:
     int port_;
 };
 
+void mgmtListener(const std::string& clientIp, int mgmtPort, int ebikeId) {
+    try {
+        sim::set_ipaddr(clientIp.c_str());
+        sim::socket mgmtSocket(AF_INET, SOCK_DGRAM, 0);
+        struct sockaddr_in mgmtAddr;
+        memset(&mgmtAddr, 0, sizeof(mgmtAddr));
+        mgmtAddr.sin_family = AF_INET;
+        inet_pton(AF_INET, clientIp.c_str(), &mgmtAddr.sin_addr);
+        mgmtAddr.sin_port = htons(mgmtPort);
+        mgmtSocket.bind(mgmtAddr);
+
+        while (g_running) {
+            char buffer[1024];
+            struct sockaddr_in fromAddr;
+            memset(&fromAddr, 0, sizeof(fromAddr));
+            ssize_t received = mgmtSocket.recvfrom(buffer, sizeof(buffer) - 1, 0, fromAddr);
+            if (received > 0) {
+                buffer[received] = '\0';
+                std::string msg(buffer);
+
+                if (msg.find("\"type\":\"COMMAND\"") != std::string::npos) {
+                    if (msg.find("\"lock\"") != std::string::npos) {
+                        g_locked = true;
+                        std::cout << "[EBCLIENT] Received COMMAND: lock" << std::endl;
+                    } else if (msg.find("\"unlock\"") != std::string::npos) {
+                        g_locked = false;
+                        std::cout << "[EBCLIENT] Received COMMAND: unlock" << std::endl;
+                    }
+                    std::string ack = "{\"type\":\"COMMACK\",\"ebike_id\":" +
+                                     std::to_string(ebikeId) + ",\"status\":\"success\"}";
+                    mgmtSocket.sendto(ack.c_str(), ack.size(), 0, fromAddr);
+                } else if (msg.find("\"type\":\"SETUP\"") != std::string::npos) {
+                    std::cout << "[EBCLIENT] Received SETUP message" << std::endl;
+                    size_t pos = msg.find("\"data_interval\":");
+                    if (pos != std::string::npos) {
+                        int interval = std::stoi(msg.substr(pos + 16, 5));
+                        g_dataInterval = interval;
+                        std::cout << "[EBCLIENT] New sampling interval: " << interval << "s" << std::endl;
+                    }
+                }
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[EBCLIENT] Mgmt error: " << e.what() << std::endl;
+    }
+}
+
 int main(int argc, char* argv[]) {
     if (argc < 5) {
         std::cerr << "Usage: " << argv[0] << " <client_ip> <ebike_id> <csv_file> <num_ports>\n";
@@ -107,8 +156,7 @@ int main(int argc, char* argv[]) {
     std::string serverIp = readConfigValue(ebikeConstants::CONFIG_PATH, "server", "ip");
     int serverPort = std::stoi(readConfigValue(ebikeConstants::CONFIG_PATH, "server", "port"));
     int clientPort = std::stoi(readConfigValue(ebikeConstants::CONFIG_PATH, "client", "port"));
-
-    std::string lockStatus = "unlocked";
+    int mgmtPort = std::stoi(readConfigValue(ebikeConstants::CONFIG_PATH, "client", "management_port"));
 
     sim::set_ipaddr(clientIp.c_str());
     sim::socket clientSocket(AF_INET, SOCK_DGRAM, 0);
@@ -126,7 +174,11 @@ int main(int argc, char* argv[]) {
     inet_pton(AF_INET, serverIp.c_str(), &serverAddr.sin_addr);
     serverAddr.sin_port = htons(serverPort);
 
-    std::cout << "[EBCLIENT] eBike Client started on: " << clientIp << ":" << clientPort << "." << std::endl;
+    std::cout << "[EBCLIENT] eBike Client started on: " << clientIp << ":" << clientPort
+              << ". Management port: " << mgmtPort << "." << std::endl;
+
+    std::thread mgmtThread(mgmtListener, clientIp, mgmtPort, ebikeId);
+    mgmtThread.detach();
 
     CSVHALManager hal(numPorts);
     GPSSensor gpsSensor(gpsSensorId);
@@ -147,7 +199,10 @@ int main(int argc, char* argv[]) {
         if (gpsData.empty()) break;
 
         std::string timestamp = currentTimestamp();
-        std::cout << "[EBCLIENT] " << timestamp << " gps: " << gpsData << "(" << lockStatus << ")\n";
+        std::string lockStatus = g_locked ? "Locked" : "Unlocked";
+
+        std::cout << "[EBCLIENT] " << timestamp << " gps: " << gpsData
+                  << "(" << lockStatus << ")\n";
 
         double lat = 0.0, lon = 0.0;
         sscanf(gpsData.c_str(), "{\"lat\":%lf,\"lon\":%lf}", &lat, &lon);
@@ -157,21 +212,17 @@ int main(int argc, char* argv[]) {
                 << ",\"timestamp\":\"" << timestamp << "\""
                 << ",\"lat\":" << lat
                 << ",\"lon\":" << lon
-                << ",\"status\":\"" << lockStatus << "\"}";
+                << ",\"status\":\"" << (g_locked ? "locked" : "unlocked") << "\"}";
 
         clientSocket.sendto(dataMsg.str().c_str(), dataMsg.str().size(), 0, serverAddr);
 
         char buffer[256];
         struct sockaddr_in fromAddr;
         memset(&fromAddr, 0, sizeof(fromAddr));
-        ssize_t received = clientSocket.recvfrom(buffer, sizeof(buffer) - 1, 0, fromAddr);
-        if (received > 0) {
-            buffer[received] = '\0';
-            std::cout << "[EBCLIENT] ACK: " << buffer << std::endl;
-        }
+        clientSocket.recvfrom(buffer, sizeof(buffer) - 1, 0, fromAddr);
 
         readCount++;
-        std::this_thread::sleep_for(std::chrono::seconds(5));
+        std::this_thread::sleep_for(std::chrono::seconds(g_dataInterval.load()));
     }
 
     gpsSensor.disconnect();

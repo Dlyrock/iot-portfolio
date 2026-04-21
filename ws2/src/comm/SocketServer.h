@@ -1,14 +1,10 @@
-/**
- * @file SocketServer.h
- * @brief UDP Socket server for receiving eBike data.
- * Module: UFCFVK-15-2 Internet of Things
- */
 #pragma once
 #include <string>
 #include <iostream>
 #include <cstring>
 #include <thread>
 #include <atomic>
+#include <memory>
 #include <arpa/inet.h>
 #include "sim/socket.h"
 #include "sim/in.h"
@@ -17,7 +13,8 @@
 class SocketServer {
 public:
     SocketServer(const std::string& ip, int port, int mgmtPort, Poco::JSON::Array::Ptr& ebikes)
-        : ip_(ip), port_(port), mgmtPort_(mgmtPort), ebikes_(ebikes), running_(false) {}
+        : ip_(ip), port_(port), mgmtPort_(mgmtPort), ebikes_(ebikes), running_(false),
+          handler_(std::make_shared<MessageHandler>(ebikes)) {}
 
     void start() {
         running_ = true;
@@ -45,8 +42,6 @@ private:
             std::cout << "[SOCKETS] " << ip_ << " Socket server started on:" << port_
                       << ". Management port: " << mgmtPort_ << std::endl;
 
-            MessageHandler handler(ebikes_);
-
             while (running_) {
                 char buffer[1024];
                 struct sockaddr_in clientAddr;
@@ -56,7 +51,7 @@ private:
                     buffer[received] = '\0';
                     char clientIp[INET_ADDRSTRLEN];
                     inet_ntop(AF_INET, &clientAddr.sin_addr, clientIp, sizeof(clientIp));
-                    handler.handleMessage(std::string(buffer), std::string(clientIp), ebikes_);
+                    handler_->handleMessage(std::string(buffer), std::string(clientIp), ebikes_, &serverSocket);
                     std::string ack = "{\"status\":\"ok\"}";
                     serverSocket.sendto(ack.c_str(), ack.size(), 0, clientAddr);
                 }
@@ -77,8 +72,6 @@ private:
             mgmtAddr.sin_port = htons(mgmtPort_);
             mgmtSocket.bind(mgmtAddr);
 
-            MessageHandler handler(ebikes_);
-
             while (running_) {
                 char buffer[1024];
                 struct sockaddr_in clientAddr;
@@ -88,7 +81,7 @@ private:
                     buffer[received] = '\0';
                     char clientIp[INET_ADDRSTRLEN];
                     inet_ntop(AF_INET, &clientAddr.sin_addr, clientIp, sizeof(clientIp));
-                    handler.handleMessage(std::string(buffer), std::string(clientIp), ebikes_);
+                    handler_->handleMessage(std::string(buffer), std::string(clientIp), ebikes_, &mgmtSocket);
                     std::string ack = "{\"status\":\"ok\"}";
                     mgmtSocket.sendto(ack.c_str(), ack.size(), 0, clientAddr);
                 }
@@ -105,4 +98,5 @@ private:
     std::atomic<bool> running_;
     std::thread thread_;
     std::thread mgmtThread_;
+    std::shared_ptr<MessageHandler> handler_;
 };
