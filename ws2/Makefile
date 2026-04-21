@@ -14,25 +14,23 @@ CATCH2_DIR = /opt/iot
 
 # Server library paths
 INCLUDES = -I$(POCO_DIR)/include -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/web -I$(INCLUDE_DIR)/util -I$(SRC_DIR)
-LIBS = -L$(LIB_DIR) -lwebserver -L$(POCO_DIR)/lib -lPocoNet -lPocoUtil -lPocoFoundation -lPocoJSON -lpthread
+LIBS = -L$(LIB_DIR) -lwebserver -lsimnet -L$(POCO_DIR)/lib -lPocoNet -lPocoUtil -lPocoFoundation -lPocoJSON -lpthread
 LDFLAGS = -Wl,-rpath,$(POCO_DIR)/lib
 
 # Clients library paths
 CL_INCLUDES = -I$(INCLUDE_DIR)
-CLILIBS = -L$(LIB_DIR) -lclient -L$(POCO_DIR)/lib -lPocoNet -lPocoUtil -lPocoFoundation -lPocoJSON -lpthread
+CLILIBS = -L$(LIB_DIR) -lclient -lsimnet -L$(POCO_DIR)/lib -lPocoNet -lPocoUtil -lPocoFoundation -lPocoJSON -lpthread
 CL_LDFLAGS = -Wl,-rpath,$(POCO_DIR)/lib
 
 # Test paths
 TEST_INCLUDES = -I$(CATCH2_DIR) $(INCLUDES) $(CL_INCLUDES)
-TEST_LIBS = $(LIBS) -lclient -L$(POCO_DIR)/lib -lPocoNet -lPocoUtil -lPocoFoundation -lPocoJSON -lpthread
+TEST_LIBS = $(LIBS) -lclient -lsimnet -L$(POCO_DIR)/lib -lPocoNet -lPocoUtil -lPocoFoundation -lPocoJSON -lpthread
 
 # Target executables
 # DO NOT CHANGE THE NAMES OF THE TARGETS
 SERVER_TARGET = ebikeGateway
 EBIKE_CLIENT_TARGET = ebikeClient
 MNGMT_CLIENT_TARGET = managementClient
-
-
 
 # Source files
 SERVER_SRCS = $(wildcard $(SRC_DIR)/ebikeGateway.cpp)
@@ -68,7 +66,7 @@ $(BUILD_DIR):
 	mkdir -p $(TEST_BUILD_DIR)
 
 $(SERVER_TARGET): $(SERVER_OBJS)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $^ $(LIBS) $(LDFLAGS) 
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $^ $(LIBS) $(LDFLAGS)
 
 $(EBIKE_CLIENT_TARGET): $(EBIKE_CLIENT_OBJS)
 	$(CXX) $(CXXFLAGS) $(CL_INCLUDES) -o $@ $^ $(CLILIBS) $(CL_LDFLAGS)
@@ -76,23 +74,18 @@ $(EBIKE_CLIENT_TARGET): $(EBIKE_CLIENT_OBJS)
 $(MNGMT_CLIENT_TARGET): $(MNGMT_CLIENT_OBJS)
 	$(CXX) $(CXXFLAGS) $(CL_INCLUDES) -o $@ $^ $(CLILIBS) $(CL_LDFLAGS)
 
-# Pattern rule to build each main object file
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-# Pattern rule to build each test object file
 $(TEST_BUILD_DIR)/%.o: $(TEST_DIR)/%.cpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(TEST_INCLUDES) -c $< -o $@
 
-# Pattern rule to build each test executable
 $(TEST_BUILD_DIR)/%: $(TEST_BUILD_DIR)/%.o $(LIBRARY_CL)
 	$(CXX) $(CXXFLAGS) $(TEST_INCLUDES) -o $@ $^ $(TEST_LIBS) $(LDFLAGS)
 
-# Run a specific test with arguments: make run-test TEST=name ARGS="--list-tests"
 run-test: tests
 	@$(TEST_BUILD_DIR)/$(TEST) $(ARGS)
 
-# Run main executables with arguments
 run-gateway:
 	@./$(SERVER_TARGET)
 
@@ -102,6 +95,5 @@ run-ebike-client:
 run-management-client:
 	@./$(MNGMT_CLIENT_TARGET) $(ARGS)
 
-# Clean up build files
 clean:
 	rm -rf $(BUILD_DIR) $(SERVER_TARGET) $(EBIKE_CLIENT_TARGET) $(MNGMT_CLIENT_TARGET) $(TEST_BUILD_DIR)/*
