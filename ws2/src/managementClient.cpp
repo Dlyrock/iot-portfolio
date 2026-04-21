@@ -7,10 +7,23 @@
 #include <iostream>
 #include <fstream>
 #include <cstring>
+#include <chrono>
+#include <ctime>
 #include <arpa/inet.h>
+#include <Poco/JSON/Parser.h>
+#include <Poco/JSON/Object.h>
 
 #include "sim/socket.h"
 #include "sim/in.h"
+
+std::string currentTimestamp() {
+    auto now = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm* tm_info = std::localtime(&t);
+    char buf[20];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", tm_info);
+    return std::string(buf);
+}
 
 int main(int argc, char* argv[]) {
     if (argc < 4) {
@@ -28,9 +41,33 @@ int main(int argc, char* argv[]) {
         std::cerr << "[MCLIENT] Failed to open JSON file: " << jsonFile << std::endl;
         return 1;
     }
-    std::string message((std::istreambuf_iterator<char>(file)),
+    std::string rawJson((std::istreambuf_iterator<char>(file)),
                          std::istreambuf_iterator<char>());
     file.close();
+
+    // Parse and update timestamp
+    Poco::JSON::Parser parser;
+    auto result = parser.parse(rawJson);
+    auto json = result.extract<Poco::JSON::Object::Ptr>();
+    json->set("timestamp", currentTimestamp());
+
+    // Build output message based on directive
+    std::string directive = json->getValue<std::string>("directive");
+    Poco::JSON::Object::Ptr outMsg = new Poco::JSON::Object();
+    outMsg->set("timestamp", currentTimestamp());
+
+    if (directive == "COMMAND") {
+        outMsg->set("type", std::string("COMMAND"));
+        outMsg->set("action", json->getArray("action")->get(0).toString());
+        outMsg->set("ebike_ids", json->getArray("ebike_ids"));
+    } else if (directive == "SETUP") {
+        outMsg->set("type", std::string("SETUP"));
+        outMsg->set("data_interval", json->getValue<int>("data_interval"));
+    }
+
+    std::ostringstream oss;
+    outMsg->stringify(oss);
+    std::string message = oss.str();
 
     std::cout << "[MCLIENT] Message: " << message << std::endl;
 
@@ -51,10 +88,8 @@ int main(int argc, char* argv[]) {
     inet_pton(AF_INET, serverIp.c_str(), &serverAddr.sin_addr);
     serverAddr.sin_port = htons(8085);
 
-    // Send message
     clientSocket.sendto(message.c_str(), message.size(), 0, serverAddr);
 
-    // Receive ACK
     char buffer[256];
     struct sockaddr_in fromAddr;
     memset(&fromAddr, 0, sizeof(fromAddr));

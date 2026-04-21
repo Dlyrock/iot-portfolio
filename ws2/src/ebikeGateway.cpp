@@ -28,19 +28,16 @@ int main() {
     std::signal(SIGTERM, signalHandler);
 
     try {
-        // Read config
         std::string serverIp = readConfigValue(ebikeConstants::CONFIG_PATH, "server", "ip");
         int socketPort = std::stoi(readConfigValue(ebikeConstants::CONFIG_PATH, "server", "port"));
+        int mgmtPort = std::stoi(readConfigValue(ebikeConstants::CONFIG_PATH, "server", "management_port"));
         int webPort = std::stoi(readConfigValue(ebikeConstants::CONFIG_PATH, "webserver", "port"));
 
-        // Shared ebikes list
         Poco::JSON::Array::Ptr ebikes = new Poco::JSON::Array();
 
-        // Start socket server
-        SocketServer socketServer(serverIp, socketPort, ebikes);
+        SocketServer socketServer(serverIp, socketPort, mgmtPort, ebikes);
         socketServer.start();
 
-        // Start web server
         WebServer webServer(ebikes);
         webServer.start(webPort);
 
