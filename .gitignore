@@ -39,3 +39,8 @@
 
 # debug information files
 *.dwo
+ws1/build/
+ws1/ebikeClient
+ws2/build/
+ws2/ebikeGateway
+ws2/managementClient
